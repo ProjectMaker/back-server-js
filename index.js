@@ -4,36 +4,21 @@
  */
 
 // Dependencies
+const cluster = require('cluster')
 const http = require('http')
 const https = require('https')
+const os = require('os')
 const url = require('url')
-const StringDecoder = require('string_decoder').StringDecoder
+const { StringDecoder } = require('string_decoder')
 const fs = require('fs')
-const config = require('./config')
 
-// Instantiate the http server
-const httpServer = http.createServer((req, res) => {
-    unifiedServer(req, res)
-})
+const config = require('./config')
 
 // Start http server
 const httpsServerOptions = {
     key: fs.readFileSync('./https/key.pem'),
     cert: fs.readFileSync('./https/cert.pem')
 }
-httpServer.listen(config.httpPort, () => {
-    console.log(`The server listen on port ${config.httpPort} in config ${config.envName} mode`)
-})
-
-// Instantiate the https server
-const httpsServer = https.createServer(httpsServerOptions, (req, res) => {
-    unifiedServer(req, res)
-})
-
-// Start https server
-httpsServer.listen(config.httpsPort, () => {
-    console.log(`The server listen on port ${config.httpsPort} in config ${config.envName} mode`)
-})
 
 // All the server logic for both the http and https server
 const unifiedServer = (req, res) => {
@@ -97,6 +82,20 @@ const unifiedServer = (req, res) => {
     })
 }
 
+// Instantiate the http server
+const httpServer = http.createServer((req, res) => {
+    unifiedServer(req, res)
+})
+
+
+
+// Instantiate the https server
+const httpsServer = https.createServer(httpsServerOptions, (req, res) => {
+    unifiedServer(req, res)
+})
+
+
+
 // Define the handlers
 const handlers = {}
 
@@ -115,3 +114,26 @@ handlers.notFound = (data, cb) => {
 const router = {
     hello: handlers.hello
 }
+
+
+// Init function
+const init = () => {
+    if (cluster.isMaster) {
+        for (let i = 0; i < os.cpus().length; i++) {
+            cluster.fork()
+        }
+    } else {
+        // Start http server
+        httpServer.listen(config.httpPort, () => {
+            console.log('\x1b[36m%s\x1b[0m', `The server listen on port ${config.httpPort} in config ${config.envName} mode`)
+        })
+
+        // Start https server
+        httpsServer.listen(config.httpsPort, () => {
+            console.log('\x1b[35m%s\x1b[0m', `The server listen on port ${config.httpsPort} in config ${config.envName} mode`)
+        })
+    }
+
+}
+
+init()
